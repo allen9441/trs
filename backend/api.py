@@ -8,10 +8,12 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import multiprocessing
 import tempfile
 import threading
 import uuid
 import zipfile
+from concurrent.futures import ProcessPoolExecutor
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -426,6 +428,35 @@ def delete_session(session_id: str) -> dict:
     return {"deleted": bool(session)}
 
 
+MAX_WORKERS = int(os.environ.get("XRD_WORKERS", 8))
+_JOB: tuple | None = None  # (session, stats, qx, qy, req) for the forked workers of the running convert
+
+
+def _convert_range(r: xrd.FrameRange) -> tuple[dict, list, dict]:
+    session, stats, qx, qy, req = _JOB
+    stem = session.master.stem.removesuffix("_master")
+    sheets, csv_files = [], {}
+    values = xrd.intensity_map(session.source, stats, r.frames, req.mode)
+    grid = xrd.bin_to_q(values, qx, qy, req.q_bin, agg="max" if req.mode == "z" else "mean")
+    tables = {**xrd.pixel_tables(values, req.formats), **xrd.q_tables(grid, req.formats)}
+    for kind in [k for k in SHEET_KIND if k in tables]:
+        table = tables[kind]
+        if req.output == "csv":
+            csv_files[f"{stem}_{req.mode}_frames{r.label}_{kind}.csv"] = xrd.table_csv(table)
+        else:
+            sheets.append((_sheet_name(req.mode, r.label, kind), table))
+    h, w = values.shape
+    item = {
+        "label": r.label,
+        "frames": [r.start, r.end],
+        "max": None if np.all(np.isnan(values)) else round(float(np.nanmax(values)), 1),
+        "n_bright": int((values >= SPOT_THRESHOLD).sum()) if req.mode == "z" else None,
+        "preview_pixel": _preview(values, np.arange(w, dtype=float), np.arange(h, dtype=float)),
+        "preview_q": _preview(grid.values, grid.qx, grid.qy),
+    }
+    return item, sheets, csv_files
+
+
 @app.post("/sessions/{session_id}/convert")
 def convert(session_id: str, req: ConvertIn) -> dict:
     session = _session(session_id)
@@ -441,24 +472,22 @@ def convert(session_id: str, req: ConvertIn) -> dict:
     stem = session.master.stem.removesuffix("_master")
     result_id = uuid.uuid4().hex[:12]
     items, sheets, csv_files = [], [], {}
-    for r in ranges:
-        values = xrd.intensity_map(session.source, stats, r.frames, req.mode)
-        grid = xrd.bin_to_q(values, qx, qy, req.q_bin, agg="max" if req.mode == "z" else "mean")
-        tables = {**xrd.pixel_tables(values, req.formats), **xrd.q_tables(grid, req.formats)}
-        for kind in [k for k in SHEET_KIND if k in tables]:
-            table = tables[kind]
-            sheets.append((_sheet_name(req.mode, r.label, kind), table))
-            if req.output == "csv":
-                csv_files[f"{stem}_{req.mode}_frames{r.label}_{kind}.csv"] = xrd.table_csv(table)
-        h, w = values.shape
-        items.append({
-            "label": r.label,
-            "frames": [r.start, r.end],
-            "max": None if np.all(np.isnan(values)) else round(float(np.nanmax(values)), 1),
-            "n_bright": int((values >= SPOT_THRESHOLD).sum()) if req.mode == "z" else None,
-            "preview_pixel": _preview(values, np.arange(w, dtype=float), np.arange(h, dtype=float)),
-            "preview_q": _preview(grid.values, grid.qx, grid.qy),
-        })
+    global _JOB
+    _JOB = (session, stats, qx, qy, req)
+    workers = min(os.cpu_count() or 1, len(ranges), MAX_WORKERS)
+    try:
+        if workers > 1 and "fork" in multiprocessing.get_all_start_methods():
+            # CSV formatting holds the GIL, so threads don't help; forked workers share the loaded state.
+            with ProcessPoolExecutor(workers, mp_context=multiprocessing.get_context("fork")) as pool:
+                results = list(pool.map(_convert_range, ranges, chunksize=max(1, len(ranges) // (workers * 4))))
+        else:
+            results = [_convert_range(r) for r in ranges]
+    finally:
+        _JOB = None
+    for item, range_sheets, range_csv in results:
+        items.append(item)
+        sheets.extend(range_sheets)
+        csv_files.update(range_csv)
 
     notes = _notes(session, req, stats, items)
     if req.output == "xlsx":
