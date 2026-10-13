@@ -1,0 +1,6 @@
+[server]
+# Eiger data files are hundreds of MB (default limit is 200 MB).
+maxUploadSize = 4096
+
+[browser]
+gatherUsageStats = false

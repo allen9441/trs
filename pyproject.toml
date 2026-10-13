@@ -1,0 +1,33 @@
+[project]
+name = "xrd-h5-csv"
+version = "0.1.0"
+description = "2D XRD (Eiger H5) to CSV converter: FastAPI backend + Streamlit frontend"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.143.0",
+    "h5py>=3.16.0",
+    "hdf5plugin>=7.1.0",
+    "numpy>=2.4.6",
+    "pandas>=3.0.6",
+    "plotly>=7.1.0",
+    "pyfai>=2026.9.0",
+    "python-multipart>=0.0.32",
+    "requests>=2.34.2",
+    "scipy>=1.17.1",
+    "streamlit>=1.65.0",
+    "uvicorn[standard]>=0.54.0",
+    "xlsxwriter>=3.2.9",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "httpx2>=2.13.1",
+    "openpyxl>=3.1.5",
+    "pytest>=9.1.1",
+]
