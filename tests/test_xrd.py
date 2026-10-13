@@ -166,3 +166,10 @@ def test_downsample_max_keeps_spots():
     values[7, 3] = 9.0
     small, factor = xrd.downsample_max(values, target=5)
     assert factor == 2 and small.shape == (5, 5) and small[3, 1] == 9.0
+
+
+def test_expand_ranges():
+    r = xrd.parse_ranges("2-4; 3", 10)
+    assert [x.label for x in xrd.expand_ranges(r, "range")] == ["2-4", "3"]
+    assert [x.label for x in xrd.expand_ranges(r, "each")] == ["2", "3", "4"]
+    assert [x.label for x in xrd.expand_ranges(r, "both")] == ["2-4", "3", "2", "4"]

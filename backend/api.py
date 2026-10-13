@@ -106,6 +106,7 @@ class ConvertIn(BaseModel):
     mode: Literal["z", "counts"] = "z"
     formats: list[Literal["matrix", "xyz"]] = Field(default_factory=lambda: ["matrix"], min_length=1)
     output: Literal["xlsx", "csv"] = "xlsx"  # xlsx: one workbook, one sheet per table; csv: zip
+    split: Literal["range", "each", "both"] = "range"  # range: stack each range; each: one table per frame; both
     q_bin: float = Field(0.004, gt=0, le=0.1)
     geometry: GeometryIn = Field(default_factory=GeometryIn)
 
@@ -431,7 +432,7 @@ def convert(session_id: str, req: ConvertIn) -> dict:
     if session.source.missing_files:
         raise HTTPException(400, "缺少資料檔：" + ", ".join(session.source.missing_files))
     try:
-        ranges = xrd.parse_ranges(req.frames, session.header.n_frames)
+        ranges = xrd.expand_ranges(xrd.parse_ranges(req.frames, session.header.n_frames), req.split)
         qx, qy = session.get_q(req.geometry)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
@@ -461,7 +462,8 @@ def convert(session_id: str, req: ConvertIn) -> dict:
 
     notes = _notes(session, req, stats, items)
     if req.output == "xlsx":
-        file_name = f"{stem}_{'亮點圖' if req.mode == 'z' else '原始計數'}_{'_'.join(r.label for r in ranges)}.xlsx"
+        labels = "_".join(r.label for r in ranges) if len(ranges) <= 5 else f"{len(ranges)}組"
+        file_name = f"{stem}_{'亮點圖' if req.mode == 'z' else '原始計數'}_{labels}.xlsx"
         path = session.dir / f"result_{result_id}.xlsx"
         try:
             contents = xrd.write_xlsx(path, sheets, notes)

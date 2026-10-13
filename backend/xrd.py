@@ -320,6 +320,15 @@ def parse_ranges(text: str, n_frames: int) -> list[FrameRange]:
     return list(dict.fromkeys(ranges))
 
 
+def expand_ranges(ranges: list[FrameRange], split: str = "range") -> list[FrameRange]:
+    """split "range": ranges as given (stacked); "each": every frame on its own; "both": ranges, then each frame."""
+    if split not in ("range", "each", "both"):
+        raise ValueError(f"unknown split: {split}")
+    singles = [FrameRange(n, n) for r in ranges for n in r.frames]
+    out = ranges if split == "range" else singles if split == "each" else [*ranges, *singles]
+    return list(dict.fromkeys(out))
+
+
 # ---------------------------------------------------------------- tables / output
 
 EXCEL_MAX_ROWS = 1_048_576

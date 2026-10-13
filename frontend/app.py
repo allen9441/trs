@@ -182,6 +182,13 @@ with left:
         value=f"1-{n}",
         help="例：19; 9-29; 1-150。單張輸出該張；範圍內每個像素取最大值（亮點會累積成環）。",
     )
+    split_label = st.radio(
+        "輸出方式",
+        ["疊加（每組範圍合成一張表）", "逐張（範圍內每一張各自一張表）", "兩者都要（疊加 + 逐張）"],
+        help="疊加：範圍內每個像素取最大值（z）或加總（計數）。逐張：把範圍展開，每張影像單獨輸出表格。"
+        "例：1-150 逐張 = 150 組表格。張數多時建議用 CSV，Excel 會非常大。",
+    )
+    split = ["range", "each", "both"][["疊加", "逐張", "兩者"].index(split_label[:2])]
     mode_label = st.radio(
         "強度",
         ["亮點強度 z（範圍取最大）", "原始計數（範圍加總）"],
@@ -198,7 +205,7 @@ with left:
         options=["matrix", "xyz"],
         default=["matrix"],
         format_func={"matrix": "矩陣（第一列 x、第一欄 y，可直接給 Origin）", "xyz": "三欄 XYZ（x, y, 強度）"}.get,
-        help="每個張數範圍輸出像素座標與 q 座標兩種表格。像素 XYZ 約 106 萬列，超過 Excel 單一工作表上限，會分成多個工作表。",
+        help="每組（疊加範圍或單張）輸出像素座標與 q 座標兩種表格。像素 XYZ 約 106 萬列，超過 Excel 單一工作表上限，會分成多個工作表。",
     )
     q_bin = st.number_input("q 網格間距 (Å⁻¹)", min_value=0.0005, max_value=0.1, value=0.004, step=0.001, format="%.4f")
 
@@ -221,7 +228,7 @@ with right:
         st.caption(f"像素尺寸 {geo['pixel_um']} µm。+qx = 影像右方，+qy = 影像上方。")
 
 if st.button("開始轉換", type="primary", disabled=not formats):
-    body = {"frames": frames, "mode": mode, "formats": formats, "output": output, "q_bin": q_bin, "geometry": geometry}
+    body = {"frames": frames, "mode": mode, "formats": formats, "output": output, "split": split, "q_bin": q_bin, "geometry": geometry}
     with st.spinner("計算中…（第一次轉換需先統計全部張的平均影像；Excel 輸出需要較久）"):
         result = api("POST", f"/sessions/{session['session_id']}/convert", json=body).json()
         data = api("GET", f"/sessions/{session['session_id']}/results/{result['result_id']}").content
@@ -268,7 +275,12 @@ lo = c1.number_input("色階下限（低於此值為白色）", min_value=0.01, 
 hi = c2.number_input("色階上限（0 = 自動）", min_value=0.0, value=0.0)
 st.caption("對數色階；灰色 = 無資料。預覽為降採樣（每格取區塊最大值），CSV 為完整解析度。")
 
-for r in result["ranges"]:
+shown = result["ranges"]
+if len(shown) > 12:
+    labels = [r["label"] for r in shown]
+    picked = st.multiselect("預覽哪幾組（下載檔含全部）", labels, default=labels[:6])
+    shown = [r for r in shown if r["label"] in picked]
+for r in shown:
     st.markdown(f"**第 {r['label']} 張**")
     p1, p2 = st.columns(2)
     pp, pq = r["preview_pixel"], r["preview_q"]
