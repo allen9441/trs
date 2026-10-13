@@ -1,6 +1,6 @@
 # 2D XRD H5 → Excel / CSV
 
-把 Eiger 2D XRD 的 H5 檔轉成亮點圖表格，格式與 `50V_亮點圖_19_9-29_1-150_Origin.xlsx` 相同：
+把 Eiger 2D XRD 的 H5 檔轉成亮點圖表格。
 每個張數範圍輸出 **像素座標**（x pixel × y pixel × 強度）與 **q 座標**（Q(x) × Q(y) × 強度）兩種表格。
 
 - 後端：FastAPI（`backend/`）— 讀 H5、計算亮點 z 值、換算 q、輸出 xlsx / CSV
@@ -46,23 +46,4 @@ data/
 uv sync
 ./run.sh                       # 後端 :8000 + 前端 :8501
 uv run pytest                  # 測試（合成資料）
-```
-
-## 部署（pm2 + nginx）
-
-`/home/user/builds/ecosystem.config.js` 中的兩個 app：
-
-| pm2 名稱 | 內容 | 位址 |
-|---|---|---|
-| `trs-api` | FastAPI 後端 | 127.0.0.1:8508（僅本機） |
-| `trs` | Streamlit 前端 | 0.0.0.0:8507，base path `/trs` |
-
-nginx（`/home/user/builds/proxy/nginx.conf`）的 `location /trs/` 反代理到 8507，
-並把上傳上限放寬到 4096M（資料檔數百 MB；Streamlit 端上限在 `.streamlit/config.toml`）。
-`data/` 要讓執行 pm2 的使用者可寫入（目前為 `drwxrwsr-x`，群組 `user`）。
-
-```bash
-cd /home/user/builds
-pm2 start ecosystem.config.js --only trs-api,trs && pm2 save
-docker exec lab-nginx nginx -s reload
 ```
