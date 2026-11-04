@@ -109,7 +109,7 @@ class ConvertIn(BaseModel):
     formats: list[Literal["matrix", "xyz"]] = Field(default_factory=lambda: ["matrix"], min_length=1)
     output: Literal["xlsx", "csv"] = "xlsx"  # xlsx: one workbook, one sheet per table; csv: zip
     split: Literal["range", "each", "both"] = "range"  # range: stack each range; each: one table per frame; both
-    q_bin: float = Field(0.004, gt=0, le=0.1)
+    q_bin: float = Field(0.004, ge=0.00005, le=0.1)
     geometry: GeometryIn = Field(default_factory=GeometryIn)
 
 
@@ -153,6 +153,12 @@ def _session_info(s: Session) -> dict:
             "center_y": h.beam_center_y,
             "wavelength_A": h.wavelength_A,
             "pixel_um": round(h.pixel_x_m * 1e6, 3),
+            # q spacing of one pixel near the beam (small angle): 2*pi*p / (lambda*D), 1/A
+            "q_pixel": (
+                2 * np.pi * h.pixel_x_m / (h.wavelength_A * 1e-10 * h.distance_m)
+                if h.wavelength_A and h.distance_m
+                else None
+            ),
         },
     }
 

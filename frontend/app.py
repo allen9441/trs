@@ -207,7 +207,17 @@ with left:
         format_func={"matrix": "矩陣（第一列 x、第一欄 y，可直接給 Origin）", "xyz": "三欄 XYZ（x, y, 強度）"}.get,
         help="每組（疊加範圍或單張）輸出像素座標與 q 座標兩種表格。像素 XYZ 約 106 萬列，超過 Excel 單一工作表上限，會分成多個工作表。",
     )
-    q_bin = st.number_input("q 網格間距 (Å⁻¹)", min_value=0.0005, max_value=0.1, value=0.004, step=0.001, format="%.4f")
+    q_native = geo.get("q_pixel") or 0.004
+    q_bin = st.number_input(
+        "q 網格間距 (Å⁻¹)",
+        min_value=0.00005,
+        max_value=0.1,
+        value=float(f"{q_native:.2g}"),
+        step=float(f"{q_native:.2g}"),
+        format="%.5f",
+        help=f"預設 = 偵測器單一像素對應的 q 間距（約 {q_native:.5f} Å⁻¹），解析度與原始資料相同。"
+        "調大會把多個像素合併（解析度下降、檔案變小）；SAXS 距離遠時像素的 q 間距很小，固定 0.004 會損失十幾倍解析度。",
+    )
 
 with right:
     sources = ["poni", "header"] if session["poni"] else ["header"]
