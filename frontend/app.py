@@ -3,6 +3,7 @@
 Run:  uv run streamlit run frontend/app.py   (backend URL via XRD_BACKEND, default http://localhost:8000)
 """
 
+import math
 import os
 from urllib.parse import quote
 
@@ -208,12 +209,15 @@ with left:
         help="每組（疊加範圍或單張）輸出像素座標與 q 座標兩種表格。像素 XYZ 約 106 萬列，超過 Excel 單一工作表上限，會分成多個工作表。",
     )
     q_native = geo.get("q_pixel") or 0.004
+    # round UP to 2 significant digits: a step even slightly below the pixel q spacing leaves
+    # periodic empty rows/columns (aliasing), a step slightly above never does.
+    q_default = math.ceil(q_native / 10 ** (math.floor(math.log10(q_native)) - 1)) * 10 ** (math.floor(math.log10(q_native)) - 1)
     q_bin = st.number_input(
         "q 網格間距 (Å⁻¹)",
         min_value=0.00005,
         max_value=0.1,
-        value=float(f"{q_native:.2g}"),
-        step=float(f"{q_native:.2g}"),
+        value=float(f"{q_default:.2g}"),
+        step=float(f"{q_default:.2g}"),
         format="%.5f",
         help=f"預設 = 偵測器單一像素對應的 q 間距（約 {q_native:.5f} Å⁻¹），解析度與原始資料相同。"
         "調大會把多個像素合併（解析度下降、檔案變小）；SAXS 距離遠時像素的 q 間距很小，固定 0.004 會損失十幾倍解析度。",
